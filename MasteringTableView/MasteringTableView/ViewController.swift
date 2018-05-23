@@ -8,12 +8,16 @@
 
 import UIKit
 
+/**
+ https://developer.apple.com/library/content/documentation/UserExperience/Conceptual/TableView_iPhone/ManageInsertDeleteRow/ManageInsertDeleteRow.html#//apple_ref/doc/uid/TP40007451-CH10-SW9
+ */
 class ViewController: UIViewController {
 
     @IBOutlet weak var tableView: UITableView!
     private var items = [String]()
     private var key: UInt64 = 0
     private let itemCountForNewGen = 8
+    private var isModifyMode = false
     
     private let insertQueue = DispatchQueue.init(label: "insertQueue")
     private let deleteQueue = DispatchQueue.init(label: "deleteQueue")
@@ -25,10 +29,10 @@ class ViewController: UIViewController {
         return self.key
     }
     
-    private func generateItems() -> [String] {
+    private func generateItems(count : Int) -> [String] {
         var items = [String]()
         keyGenQueue.sync {
-            for _ in 0..<itemCountForNewGen {
+            for _ in 0..<count {
                 items.append("\(nextKey())")
             }
         }
@@ -38,16 +42,26 @@ class ViewController: UIViewController {
     private func insertItems(items: [String]) {
         // 정렬도 해야지? 그지? 응?
         DispatchQueue.main.async {
+            UIView.setAnimationsEnabled(false)
+            self.tableView.beginUpdates()
+            let startRow = self.items.count
+            var indexPathes = [IndexPath]()
+            for i in 0..<items.count {
+                indexPathes.append(IndexPath(row: i + startRow, section: 0))
+            }
             self.items.append(contentsOf: items)
-            self.tableView.reloadData()
+            
+            self.tableView.insertRows(at: indexPathes, with: UITableViewRowAnimation.automatic)
+            self.tableView.endUpdates()
+            UIView.setAnimationsEnabled(true)
             let row = self.items.count - 1
             self.tableView.scrollToRow(at: IndexPath.init(row: row, section: 0), at: UITableViewScrollPosition.bottom, animated: false)
+            
         }
     }
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        
     }
 
     override func didReceiveMemoryWarning() {
@@ -58,7 +72,7 @@ class ViewController: UIViewController {
     @IBAction func touchUpInsertButton(_ sender: UIButton) {
         
         insertQueue.async { [weak self] in guard let sSelf = self else { return }
-            let newItems = sSelf.generateItems()
+            let newItems = sSelf.generateItems(count: sSelf.itemCountForNewGen)
             
             sSelf.insertItems(items: newItems)
         }
@@ -74,6 +88,16 @@ class ViewController: UIViewController {
         updateQueue.async { [weak self] in guard let sSelf = self else { return }
             
         }
+    }
+    
+    @IBAction func touchUpModifyButton(_ sender: Any) {
+        isModifyMode = !isModifyMode
+        if isModifyMode {
+            self.tableView.setEditing(true, animated: true)
+        } else {
+            self.tableView.setEditing(false, animated: true)
+        }
+        
     }
 }
 
@@ -109,4 +133,49 @@ extension ViewController: UITableViewDelegate {
         
         return cell
     }
+    
+    func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCellEditingStyle, forRowAt indexPath: IndexPath) {
+        if editingStyle == .delete {
+            tableView.beginUpdates()
+            self.items.remove(at: indexPath.row)
+            tableView.deleteRows(at: [indexPath], with: UITableViewRowAnimation.right)
+            tableView.endUpdates()
+        } else {
+            let newItem = self.generateItems(count: 1).first!
+            tableView.beginUpdates()
+            self.items.append(newItem)
+            tableView.insertRows(at: [indexPath], with: UITableViewRowAnimation.automatic)
+            tableView.reloadRows(at: [indexPath], with: UITableViewRowAnimation.automatic)
+            tableView.endUpdates()
+        }
+    }
+    
+    func tableView(_ tableView: UITableView, editingStyleForRowAt indexPath: IndexPath) -> UITableViewCellEditingStyle {
+        if indexPath.row == self.items.count - 1 {
+            return .insert
+        }
+        
+        return .delete
+    }
+    
+    func tableView(_ tableView: UITableView, editActionsForRowAt indexPath: IndexPath) -> [UITableViewRowAction]? {
+        var moreRowAction = UITableViewRowAction(style: UITableViewRowActionStyle.default, title: "More", handler:{action, indexpath in
+            
+        });
+        moreRowAction.backgroundColor = UIColor(red: 0.298, green: 0.851, blue: 0.3922, alpha: 1.0);
+        
+        var deleteRowAction = UITableViewRowAction(style: UITableViewRowActionStyle.default, title: "Delete", handler:{action, indexpath in
+            tableView.beginUpdates()
+            self.items.remove(at: indexPath.row)
+            tableView.deleteRows(at: [indexPath], with: UITableViewRowAnimation.right)
+            tableView.endUpdates()
+        });
+        
+        return [deleteRowAction, moreRowAction];
+    }
+    
+//    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+//        let cell = tableView.cellForRow(at: indexPath)
+//        cell?.showsReorderControl = true
+//    }
 }
